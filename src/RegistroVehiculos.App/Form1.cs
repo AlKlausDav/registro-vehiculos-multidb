@@ -1,11 +1,17 @@
+using System.ComponentModel;
+using System.Drawing;
+using System.Linq;
+using System.Windows.Forms;
 using RegistroVehiculos.Core.Enums;
 using RegistroVehiculos.Core.Models;
+using RegistroVehiculos.Core.Validation;
 
 namespace RegistroVehiculos.App;
 
 public partial class Form1 : Form
 {
     private readonly ComboBox cboMotor = new();
+
     private readonly TextBox txtPlaca = new();
     private readonly TextBox txtMarca = new();
     private readonly TextBox txtModelo = new();
@@ -20,29 +26,35 @@ public partial class Form1 : Form
     private readonly DataGridView dgvVehiculos = new();
     private readonly Label lblEstado = new();
 
+    private readonly BindingList<Vehiculo> vehiculos = new();
+
+    private Vehiculo? vehiculoSeleccionado;
+
     public Form1()
     {
         InitializeComponent();
 
         btnNuevo = CrearBoton(
             "Nuevo",
-            System.Drawing.Color.FromArgb(108, 117, 125));
+            Color.FromArgb(108, 117, 125));
 
         btnGuardar = CrearBoton(
             "Guardar",
-            System.Drawing.Color.FromArgb(25, 135, 84));
+            Color.FromArgb(25, 135, 84));
 
         btnModificar = CrearBoton(
             "Modificar",
-            System.Drawing.Color.FromArgb(13, 110, 253));
+            Color.FromArgb(13, 110, 253));
 
         btnEliminar = CrearBoton(
             "Eliminar",
-            System.Drawing.Color.FromArgb(220, 53, 69));
+            Color.FromArgb(220, 53, 69));
 
         ConfigurarVentana();
         ConstruirInterfaz();
         ConfigurarTabla();
+        ConectarEventos();
+        LimpiarFormulario();
     }
 
     private void ConfigurarVentana()
@@ -51,7 +63,7 @@ public partial class Form1 : Form
         StartPosition = FormStartPosition.CenterScreen;
         MinimumSize = new Size(900, 600);
         Size = new Size(1050, 700);
-        BackColor = System.Drawing.Color.FromArgb(245, 247, 250);
+        BackColor = Color.FromArgb(245, 247, 250);
         Font = new Font("Segoe UI", 10);
     }
 
@@ -91,8 +103,11 @@ public partial class Form1 : Form
         {
             Text = "Administración de vehículos",
             Dock = DockStyle.Fill,
-            Font = new Font("Segoe UI", 20, FontStyle.Bold),
-            ForeColor = System.Drawing.Color.FromArgb(31, 41, 55),
+            Font = new Font(
+                "Segoe UI",
+                20,
+                FontStyle.Bold),
+            ForeColor = Color.FromArgb(31, 41, 55),
             TextAlign = ContentAlignment.MiddleLeft
         };
 
@@ -106,18 +121,24 @@ public partial class Form1 : Form
             Padding = new Padding(0, 8, 0, 0)
         };
 
-        panelMotor.Controls.Add(new Label
+        var etiquetaMotor = new Label
         {
             Text = "Motor de base de datos:",
             AutoSize = true,
             Margin = new Padding(0, 7, 12, 0)
-        });
+        };
 
-        cboMotor.DropDownStyle = ComboBoxStyle.DropDownList;
+        cboMotor.DropDownStyle =
+            ComboBoxStyle.DropDownList;
+
         cboMotor.Width = 220;
-        cboMotor.DataSource = Enum.GetValues<MotorBaseDatos>();
 
+        cboMotor.DataSource =
+            Enum.GetValues<MotorBaseDatos>();
+
+        panelMotor.Controls.Add(etiquetaMotor);
         panelMotor.Controls.Add(cboMotor);
+
         contenedor.Controls.Add(panelMotor, 0, 1);
 
         var formulario = new TableLayoutPanel
@@ -125,7 +146,7 @@ public partial class Form1 : Form
             Dock = DockStyle.Fill,
             ColumnCount = 4,
             RowCount = 3,
-            BackColor = System.Drawing.Color.White,
+            BackColor = Color.White,
             Padding = new Padding(15)
         };
 
@@ -161,11 +182,40 @@ public partial class Form1 : Form
         nudAnio.Value = DateTime.Now.Year;
         nudAnio.Margin = new Padding(5);
 
-        AgregarCampo(formulario, "Placa:", txtPlaca, 0, 0);
-        AgregarCampo(formulario, "Marca:", txtMarca, 0, 2);
-        AgregarCampo(formulario, "Modelo:", txtModelo, 1, 0);
-        AgregarCampo(formulario, "Año:", nudAnio, 1, 2);
-        AgregarCampo(formulario, "Color:", txtColor, 2, 0);
+        AgregarCampo(
+            formulario,
+            "Placa:",
+            txtPlaca,
+            0,
+            0);
+
+        AgregarCampo(
+            formulario,
+            "Marca:",
+            txtMarca,
+            0,
+            2);
+
+        AgregarCampo(
+            formulario,
+            "Modelo:",
+            txtModelo,
+            1,
+            0);
+
+        AgregarCampo(
+            formulario,
+            "Año:",
+            nudAnio,
+            1,
+            2);
+
+        AgregarCampo(
+            formulario,
+            "Color:",
+            txtColor,
+            2,
+            0);
 
         contenedor.Controls.Add(formulario, 0, 2);
 
@@ -173,6 +223,7 @@ public partial class Form1 : Form
         {
             Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
             Padding = new Padding(0, 8, 0, 0)
         };
 
@@ -184,11 +235,11 @@ public partial class Form1 : Form
         contenedor.Controls.Add(panelBotones, 0, 3);
         contenedor.Controls.Add(dgvVehiculos, 0, 4);
 
-        lblEstado.Text = "Aplicación preparada.";
         lblEstado.Dock = DockStyle.Fill;
-        lblEstado.TextAlign = ContentAlignment.MiddleLeft;
+        lblEstado.TextAlign =
+            ContentAlignment.MiddleLeft;
         lblEstado.ForeColor =
-            System.Drawing.Color.FromArgb(75, 85, 99);
+            Color.FromArgb(75, 85, 99);
 
         contenedor.Controls.Add(lblEstado, 0, 5);
     }
@@ -196,53 +247,327 @@ public partial class Form1 : Form
     private void ConfigurarTabla()
     {
         dgvVehiculos.Dock = DockStyle.Fill;
-        dgvVehiculos.BackgroundColor = System.Drawing.Color.White;
-        dgvVehiculos.BorderStyle = BorderStyle.FixedSingle;
+        dgvVehiculos.BackgroundColor = Color.White;
+        dgvVehiculos.BorderStyle =
+            BorderStyle.FixedSingle;
+
         dgvVehiculos.AllowUserToAddRows = false;
         dgvVehiculos.AllowUserToDeleteRows = false;
         dgvVehiculos.AllowUserToResizeRows = false;
+
         dgvVehiculos.ReadOnly = true;
         dgvVehiculos.MultiSelect = false;
+
         dgvVehiculos.SelectionMode =
             DataGridViewSelectionMode.FullRowSelect;
 
         dgvVehiculos.AutoGenerateColumns = false;
         dgvVehiculos.RowHeadersVisible = false;
+
         dgvVehiculos.AutoSizeColumnsMode =
             DataGridViewAutoSizeColumnsMode.Fill;
 
-        dgvVehiculos.Columns.Add(new DataGridViewTextBoxColumn
-        {
-            HeaderText = "Placa",
-            DataPropertyName = nameof(Vehiculo.Placa)
-        });
+        AgregarColumna(
+            "Placa",
+            nameof(Vehiculo.Placa));
 
-        dgvVehiculos.Columns.Add(new DataGridViewTextBoxColumn
-        {
-            HeaderText = "Marca",
-            DataPropertyName = nameof(Vehiculo.Marca)
-        });
+        AgregarColumna(
+            "Marca",
+            nameof(Vehiculo.Marca));
 
-        dgvVehiculos.Columns.Add(new DataGridViewTextBoxColumn
-        {
-            HeaderText = "Modelo",
-            DataPropertyName = nameof(Vehiculo.Modelo)
-        });
+        AgregarColumna(
+            "Modelo",
+            nameof(Vehiculo.Modelo));
 
-        dgvVehiculos.Columns.Add(new DataGridViewTextBoxColumn
-        {
-            HeaderText = "Año",
-            DataPropertyName = nameof(Vehiculo.Anio)
-        });
+        AgregarColumna(
+            "Año",
+            nameof(Vehiculo.Anio));
 
-        dgvVehiculos.Columns.Add(new DataGridViewTextBoxColumn
-        {
-            HeaderText = "Color",
-            DataPropertyName = nameof(Vehiculo.Color)
-        });
+        AgregarColumna(
+            "Color",
+            nameof(Vehiculo.Color));
+
+        dgvVehiculos.DataSource = vehiculos;
     }
 
-    private static void ConfigurarCampo(TextBox campo)
+    private void AgregarColumna(
+        string encabezado,
+        string propiedad)
+    {
+        var columna = new DataGridViewTextBoxColumn
+        {
+            HeaderText = encabezado,
+            DataPropertyName = propiedad
+        };
+
+        dgvVehiculos.Columns.Add(columna);
+    }
+
+    private void ConectarEventos()
+    {
+        btnNuevo.Click += NuevoVehiculo;
+        btnGuardar.Click += GuardarVehiculo;
+        btnModificar.Click += ModificarVehiculo;
+        btnEliminar.Click += EliminarVehiculo;
+
+        dgvVehiculos.SelectionChanged +=
+            CargarVehiculoSeleccionado;
+    }
+
+    private void NuevoVehiculo(
+        object? sender,
+        EventArgs e)
+    {
+        LimpiarFormulario();
+    }
+
+    private Vehiculo ObtenerVehiculoFormulario()
+    {
+        return new Vehiculo
+        {
+            Placa =
+                txtPlaca.Text
+                    .Trim()
+                    .ToUpperInvariant(),
+
+            Marca = txtMarca.Text.Trim(),
+            Modelo = txtModelo.Text.Trim(),
+
+            Anio =
+                decimal.ToInt32(nudAnio.Value),
+
+            Color = txtColor.Text.Trim()
+        };
+    }
+
+    private bool ValidarVehiculo(
+        Vehiculo vehiculo)
+    {
+        IReadOnlyList<string> errores =
+            VehiculoValidador.Validar(vehiculo);
+
+        if (errores.Count == 0)
+        {
+            return true;
+        }
+
+        MessageBox.Show(
+            string.Join(
+                Environment.NewLine,
+                errores),
+            "Información incorrecta",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Warning);
+
+        return false;
+    }
+
+    private void GuardarVehiculo(
+        object? sender,
+        EventArgs e)
+    {
+        Vehiculo nuevoVehiculo =
+            ObtenerVehiculoFormulario();
+
+        if (!ValidarVehiculo(nuevoVehiculo))
+        {
+            return;
+        }
+
+        bool placaDuplicada =
+            vehiculos.Any(vehiculo =>
+                string.Equals(
+                    vehiculo.Placa,
+                    nuevoVehiculo.Placa,
+                    StringComparison.OrdinalIgnoreCase));
+
+        if (placaDuplicada)
+        {
+            MessageBox.Show(
+                "Ya existe un vehículo con esa placa.",
+                "Placa duplicada",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+
+            return;
+        }
+
+        vehiculos.Add(nuevoVehiculo);
+
+        LimpiarFormulario();
+
+        lblEstado.Text =
+            $"Vehículo con placa " +
+            $"{nuevoVehiculo.Placa} guardado.";
+    }
+
+    private void ModificarVehiculo(
+        object? sender,
+        EventArgs e)
+    {
+        if (vehiculoSeleccionado is null)
+        {
+            MessageBox.Show(
+                "Selecciona un vehículo de la tabla.",
+                "Vehículo no seleccionado",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+
+            return;
+        }
+
+        Vehiculo datosActualizados =
+            ObtenerVehiculoFormulario();
+
+        if (!ValidarVehiculo(datosActualizados))
+        {
+            return;
+        }
+
+        bool placaDuplicada =
+            vehiculos.Any(vehiculo =>
+                !ReferenceEquals(
+                    vehiculo,
+                    vehiculoSeleccionado)
+                &&
+                string.Equals(
+                    vehiculo.Placa,
+                    datosActualizados.Placa,
+                    StringComparison.OrdinalIgnoreCase));
+
+        if (placaDuplicada)
+        {
+            MessageBox.Show(
+                "Ya existe otro vehículo con esa placa.",
+                "Placa duplicada",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+
+            return;
+        }
+
+        vehiculoSeleccionado.Placa =
+            datosActualizados.Placa;
+
+        vehiculoSeleccionado.Marca =
+            datosActualizados.Marca;
+
+        vehiculoSeleccionado.Modelo =
+            datosActualizados.Modelo;
+
+        vehiculoSeleccionado.Anio =
+            datosActualizados.Anio;
+
+        vehiculoSeleccionado.Color =
+            datosActualizados.Color;
+
+        vehiculos.ResetBindings();
+
+        LimpiarFormulario();
+
+        lblEstado.Text =
+            $"Vehículo con placa " +
+            $"{datosActualizados.Placa} modificado.";
+    }
+
+    private void EliminarVehiculo(
+        object? sender,
+        EventArgs e)
+    {
+        if (vehiculoSeleccionado is null)
+        {
+            MessageBox.Show(
+                "Selecciona un vehículo de la tabla.",
+                "Vehículo no seleccionado",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+
+            return;
+        }
+
+        DialogResult respuesta =
+            MessageBox.Show(
+                $"¿Deseas eliminar el vehículo " +
+                $"{vehiculoSeleccionado.Placa}?",
+                "Confirmar eliminación",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question);
+
+        if (respuesta != DialogResult.Yes)
+        {
+            return;
+        }
+
+        string placaEliminada =
+            vehiculoSeleccionado.Placa;
+
+        vehiculos.Remove(vehiculoSeleccionado);
+
+        LimpiarFormulario();
+
+        lblEstado.Text =
+            $"Vehículo con placa " +
+            $"{placaEliminada} eliminado.";
+    }
+
+    private void CargarVehiculoSeleccionado(
+        object? sender,
+        EventArgs e)
+    {
+        if (dgvVehiculos.SelectedRows.Count == 0)
+        {
+            return;
+        }
+
+        object? elemento =
+            dgvVehiculos
+                .SelectedRows[0]
+                .DataBoundItem;
+
+        if (elemento is not Vehiculo seleccionado)
+        {
+            return;
+        }
+
+        vehiculoSeleccionado = seleccionado;
+
+        txtPlaca.Text = seleccionado.Placa;
+        txtMarca.Text = seleccionado.Marca;
+        txtModelo.Text = seleccionado.Modelo;
+        nudAnio.Value = seleccionado.Anio;
+        txtColor.Text = seleccionado.Color;
+
+        btnModificar.Enabled = true;
+        btnEliminar.Enabled = true;
+
+        lblEstado.Text =
+            $"Vehículo {seleccionado.Placa} seleccionado.";
+    }
+
+    private void LimpiarFormulario()
+    {
+        txtPlaca.Clear();
+        txtMarca.Clear();
+        txtModelo.Clear();
+        txtColor.Clear();
+
+        nudAnio.Value = DateTime.Now.Year;
+
+        vehiculoSeleccionado = null;
+
+        dgvVehiculos.ClearSelection();
+
+        btnModificar.Enabled = false;
+        btnEliminar.Enabled = false;
+
+        lblEstado.Text =
+            "Completa los datos del vehículo.";
+
+        txtPlaca.Focus();
+    }
+
+    private static void ConfigurarCampo(
+        TextBox campo)
     {
         campo.Dock = DockStyle.Fill;
         campo.Margin = new Padding(5);
@@ -255,30 +580,42 @@ public partial class Form1 : Form
         int fila,
         int columna)
     {
-        panel.Controls.Add(new Label
+        var label = new Label
         {
             Text = etiqueta,
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleLeft
-        }, columna, fila);
+        };
 
-        panel.Controls.Add(campo, columna + 1, fila);
+        panel.Controls.Add(
+            label,
+            columna,
+            fila);
+
+        panel.Controls.Add(
+            campo,
+            columna + 1,
+            fila);
     }
 
     private static Button CrearBoton(
         string texto,
-        System.Drawing.Color color)
+        Color color)
     {
-        return new Button
+        var boton = new Button
         {
             Text = texto,
             Width = 125,
             Height = 38,
             BackColor = color,
-            ForeColor = System.Drawing.Color.White,
+            ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat,
             Cursor = Cursors.Hand,
             Margin = new Padding(0, 0, 10, 0)
         };
+
+        boton.FlatAppearance.BorderSize = 0;
+
+        return boton;
     }
 }
