@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 using RegistroVehiculos.Core.Enums;
 using RegistroVehiculos.Core.Interfaces;
@@ -11,6 +12,27 @@ namespace RegistroVehiculos.App;
 
 public partial class Form1 : Form
 {
+    private static readonly Color ColorFondo =
+        Color.FromArgb(238, 242, 247);
+
+    private static readonly Color ColorPrincipal =
+        Color.FromArgb(30, 41, 59);
+
+    private static readonly Color ColorMorado =
+        Color.FromArgb(109, 76, 233);
+
+    private static readonly Color ColorVerde =
+        Color.FromArgb(16, 185, 129);
+
+    private static readonly Color ColorAzul =
+        Color.FromArgb(37, 99, 235);
+
+    private static readonly Color ColorRojo =
+        Color.FromArgb(225, 55, 75);
+
+    private static readonly Color ColorGris =
+        Color.FromArgb(100, 116, 139);
+
     private readonly VehiculoRepositoryFactory fabrica;
 
     private IVehiculoRepository? repositorioActual;
@@ -20,7 +42,7 @@ public partial class Form1 : Form
 
     private readonly BindingList<Vehiculo> vehiculos = new();
 
-    private readonly ComboBox cboMotor = new();
+    private readonly TabControl tabMotores = new();
 
     private readonly TextBox txtPlaca = new();
     private readonly TextBox txtMarca = new();
@@ -37,35 +59,33 @@ public partial class Form1 : Form
     private readonly DataGridView dgvVehiculos = new();
     private readonly Label lblEstado = new();
 
-    public Form1(
-        VehiculoRepositoryFactory fabrica)
+    public Form1(VehiculoRepositoryFactory fabrica)
     {
         InitializeComponent();
 
         this.fabrica = fabrica
-            ?? throw new ArgumentNullException(
-                nameof(fabrica));
+            ?? throw new ArgumentNullException(nameof(fabrica));
 
         btnConectar = CrearBoton(
-            "Conectar y cargar",
-            Color.FromArgb(111, 66, 193),
-            160);
+            "Recargar",
+            ColorMorado,
+            150);
 
         btnNuevo = CrearBoton(
             "Nuevo",
-            Color.FromArgb(108, 117, 125));
+            ColorGris);
 
         btnGuardar = CrearBoton(
             "Guardar",
-            Color.FromArgb(25, 135, 84));
+            ColorVerde);
 
         btnModificar = CrearBoton(
             "Modificar",
-            Color.FromArgb(13, 110, 253));
+            ColorAzul);
 
         btnEliminar = CrearBoton(
             "Eliminar",
-            Color.FromArgb(220, 53, 69));
+            ColorRojo);
 
         ConfigurarVentana();
         ConstruirInterfaz();
@@ -78,9 +98,9 @@ public partial class Form1 : Form
     {
         Text = "Registro de Vehículos";
         StartPosition = FormStartPosition.CenterScreen;
-        MinimumSize = new Size(900, 600);
-        Size = new Size(1050, 700);
-        BackColor = Color.FromArgb(245, 247, 250);
+        MinimumSize = new Size(950, 650);
+        Size = new Size(1100, 780);
+        BackColor = ColorFondo;
         Font = new Font("Segoe UI", 10);
     }
 
@@ -91,30 +111,36 @@ public partial class Form1 : Form
         var contenedor = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            Padding = new Padding(20),
+            Padding = new Padding(24),
             ColumnCount = 1,
-            RowCount = 6
+            RowCount = 6,
+            BackColor = ColorFondo
         };
 
         contenedor.RowStyles.Add(
-            new RowStyle(SizeType.Absolute, 55));
+            new RowStyle(SizeType.Absolute, 100));
 
         contenedor.RowStyles.Add(
-            new RowStyle(SizeType.Absolute, 55));
+            new RowStyle(SizeType.Absolute, 78));
 
         contenedor.RowStyles.Add(
-            new RowStyle(SizeType.Absolute, 150));
+            new RowStyle(SizeType.Absolute, 175));
 
         contenedor.RowStyles.Add(
-            new RowStyle(SizeType.Absolute, 55));
+            new RowStyle(SizeType.Absolute, 72));
 
         contenedor.RowStyles.Add(
             new RowStyle(SizeType.Percent, 100));
 
         contenedor.RowStyles.Add(
-            new RowStyle(SizeType.Absolute, 35));
+            new RowStyle(SizeType.Absolute, 55));
 
         Controls.Add(contenedor);
+
+        Panel encabezado = CrearTarjeta(
+            ColorPrincipal,
+            18,
+            new Padding(10));
 
         var titulo = new Label
         {
@@ -122,50 +148,72 @@ public partial class Form1 : Form
             Dock = DockStyle.Fill,
             Font = new Font(
                 "Segoe UI",
-                20,
+                23,
                 FontStyle.Bold),
-            ForeColor = Color.FromArgb(31, 41, 55),
-            TextAlign = ContentAlignment.MiddleLeft
+            ForeColor = Color.White,
+            BackColor = Color.Transparent,
+            TextAlign = ContentAlignment.MiddleCenter
         };
 
-        contenedor.Controls.Add(titulo, 0, 0);
+        encabezado.Controls.Add(titulo);
+        contenedor.Controls.Add(encabezado, 0, 0);
 
-        var panelMotor = new FlowLayoutPanel
+        Panel tarjetaMotores = CrearTarjeta(
+            Color.White,
+            16,
+            new Padding(10, 8, 10, 8));
+
+        var panelMotores = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false,
-            Padding = new Padding(0, 8, 0, 0)
+            ColumnCount = 2,
+            RowCount = 1,
+            BackColor = Color.White
         };
 
-        var etiquetaMotor = new Label
-        {
-            Text = "Motor de base de datos:",
-            AutoSize = true,
-            Margin = new Padding(0, 7, 12, 0)
-        };
+        panelMotores.ColumnStyles.Add(
+            new ColumnStyle(SizeType.Percent, 100));
 
-        cboMotor.DropDownStyle =
-            ComboBoxStyle.DropDownList;
+        panelMotores.ColumnStyles.Add(
+            new ColumnStyle(SizeType.Absolute, 180));
 
-        cboMotor.Width = 190;
+        ConfigurarPestanas();
 
-        cboMotor.DataSource =
-            Enum.GetValues<MotorBaseDatos>();
+        panelMotores.Controls.Add(
+            tabMotores,
+            0,
+            0);
 
-        panelMotor.Controls.Add(etiquetaMotor);
-        panelMotor.Controls.Add(cboMotor);
-        panelMotor.Controls.Add(btnConectar);
+        btnConectar.Dock = DockStyle.None;
+        btnConectar.Anchor = AnchorStyles.None;
+        btnConectar.AutoSize = false;
+        btnConectar.Size = new Size(150, 42);
+        btnConectar.MinimumSize = new Size(150, 42);
+        btnConectar.MaximumSize = new Size(150, 42);
+        btnConectar.Margin = new Padding(8);
+        btnConectar.Padding = new Padding(0);
+        btnConectar.TextAlign =
+            ContentAlignment.MiddleCenter;
 
-        contenedor.Controls.Add(panelMotor, 0, 1);
+        panelMotores.Controls.Add(
+            btnConectar,
+            1,
+            0);
+
+        tarjetaMotores.Controls.Add(panelMotores);
+        contenedor.Controls.Add(tarjetaMotores, 0, 1);
+
+        Panel tarjetaFormulario = CrearTarjeta(
+            Color.White,
+            16,
+            new Padding(20));
 
         var formulario = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 4,
             RowCount = 3,
-            BackColor = Color.White,
-            Padding = new Padding(15)
+            BackColor = Color.White
         };
 
         formulario.ColumnStyles.Add(
@@ -198,51 +246,80 @@ public partial class Form1 : Form
         nudAnio.Minimum = 1900;
         nudAnio.Maximum = DateTime.Now.Year + 1;
         nudAnio.Value = DateTime.Now.Year;
-        nudAnio.Margin = new Padding(5);
+        nudAnio.Margin = new Padding(7);
+        nudAnio.Font = new Font("Segoe UI", 10);
+        nudAnio.BackColor =
+            Color.FromArgb(248, 250, 252);
+        nudAnio.BorderStyle =
+            BorderStyle.FixedSingle;
 
         AgregarCampo(
             formulario,
-            "Placa:",
+            "Placa",
             txtPlaca,
             0,
             0);
 
         AgregarCampo(
             formulario,
-            "Marca:",
+            "Marca",
             txtMarca,
             0,
             2);
 
         AgregarCampo(
             formulario,
-            "Modelo:",
+            "Modelo",
             txtModelo,
             1,
             0);
 
         AgregarCampo(
             formulario,
-            "Año:",
+            "Año",
             nudAnio,
             1,
             2);
 
         AgregarCampo(
             formulario,
-            "Color:",
+            "Color",
             txtColor,
             2,
             0);
 
-        contenedor.Controls.Add(formulario, 0, 2);
+        tarjetaFormulario.Controls.Add(formulario);
+        contenedor.Controls.Add(
+            tarjetaFormulario,
+            0,
+            2);
+
+        var centradorBotones = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 3,
+            RowCount = 1,
+            BackColor = ColorFondo
+        };
+
+        centradorBotones.ColumnStyles.Add(
+            new ColumnStyle(SizeType.Percent, 50));
+
+        centradorBotones.ColumnStyles.Add(
+            new ColumnStyle(SizeType.AutoSize));
+
+        centradorBotones.ColumnStyles.Add(
+            new ColumnStyle(SizeType.Percent, 50));
 
         var panelBotones = new FlowLayoutPanel
         {
-            Dock = DockStyle.Fill,
+            AutoSize = true,
+            Anchor = AnchorStyles.None,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
-            Padding = new Padding(0, 8, 0, 0)
+            BackColor = ColorFondo,
+            Padding = new Padding(0, 10, 0, 10),
+            Margin = new Padding(0)
         };
 
         panelBotones.Controls.Add(btnNuevo);
@@ -250,24 +327,142 @@ public partial class Form1 : Form
         panelBotones.Controls.Add(btnModificar);
         panelBotones.Controls.Add(btnEliminar);
 
-        contenedor.Controls.Add(panelBotones, 0, 3);
-        contenedor.Controls.Add(dgvVehiculos, 0, 4);
+        centradorBotones.Controls.Add(
+            panelBotones,
+            1,
+            0);
+
+        contenedor.Controls.Add(
+            centradorBotones,
+            0,
+            3);
+
+        Panel tarjetaTabla = CrearTarjeta(
+            Color.White,
+            16,
+            new Padding(12));
+
+        var contenidoTabla = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            BackColor = Color.White
+        };
+
+        contenidoTabla.RowStyles.Add(
+            new RowStyle(SizeType.Absolute, 42));
+
+        contenidoTabla.RowStyles.Add(
+            new RowStyle(SizeType.Percent, 100));
+
+        var tituloTabla = new Label
+        {
+            Text = "Vehículos registrados",
+            Dock = DockStyle.Fill,
+            Font = new Font(
+                "Segoe UI",
+                11,
+                FontStyle.Bold),
+            ForeColor = ColorPrincipal,
+            BackColor = Color.White,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Padding = new Padding(8, 0, 0, 0)
+        };
+
+        contenidoTabla.Controls.Add(
+            tituloTabla,
+            0,
+            0);
+
+        contenidoTabla.Controls.Add(
+            dgvVehiculos,
+            0,
+            1);
+
+        tarjetaTabla.Controls.Add(contenidoTabla);
+        contenedor.Controls.Add(
+            tarjetaTabla,
+            0,
+            4);
+
+        Panel tarjetaEstado = CrearTarjeta(
+            Color.White,
+            14,
+            new Padding(16, 7, 16, 7));
 
         lblEstado.Dock = DockStyle.Fill;
         lblEstado.TextAlign =
             ContentAlignment.MiddleLeft;
         lblEstado.ForeColor =
-            Color.FromArgb(75, 85, 99);
+            Color.FromArgb(71, 85, 105);
+        lblEstado.Font = new Font(
+            "Segoe UI",
+            9,
+            FontStyle.Regular);
 
-        contenedor.Controls.Add(lblEstado, 0, 5);
+        tarjetaEstado.Controls.Add(lblEstado);
+        contenedor.Controls.Add(
+            tarjetaEstado,
+            0,
+            5);
+    }
+
+    private void ConfigurarPestanas()
+    {
+        tabMotores.Dock = DockStyle.Fill;
+        tabMotores.Alignment = TabAlignment.Top;
+        tabMotores.Appearance =
+            TabAppearance.FlatButtons;
+        tabMotores.DrawMode =
+            TabDrawMode.OwnerDrawFixed;
+        tabMotores.SizeMode =
+            TabSizeMode.Fixed;
+        tabMotores.ItemSize =
+            new Size(175, 42);
+
+        tabMotores.Font = new Font(
+            "Segoe UI",
+            10,
+            FontStyle.Bold);
+
+        tabMotores.TabPages.Clear();
+
+        tabMotores.TabPages.Add(
+            CrearPestanaMotor(
+                "MySQL",
+                MotorBaseDatos.MySql));
+
+        tabMotores.TabPages.Add(
+            CrearPestanaMotor(
+                "SQL Server",
+                MotorBaseDatos.SqlServer));
+
+        tabMotores.TabPages.Add(
+            CrearPestanaMotor(
+                "Oracle",
+                MotorBaseDatos.Oracle));
+
+        tabMotores.SelectedIndex = 0;
+    }
+
+    private static TabPage CrearPestanaMotor(
+        string texto,
+        MotorBaseDatos motor)
+    {
+        return new TabPage
+        {
+            Text = texto,
+            Tag = motor,
+            BackColor = Color.White
+        };
     }
 
     private void ConfigurarTabla()
     {
         dgvVehiculos.Dock = DockStyle.Fill;
         dgvVehiculos.BackgroundColor = Color.White;
-        dgvVehiculos.BorderStyle =
-            BorderStyle.FixedSingle;
+        dgvVehiculos.BorderStyle = BorderStyle.None;
 
         dgvVehiculos.AllowUserToAddRows = false;
         dgvVehiculos.AllowUserToDeleteRows = false;
@@ -275,15 +470,64 @@ public partial class Form1 : Form
 
         dgvVehiculos.ReadOnly = true;
         dgvVehiculos.MultiSelect = false;
+        dgvVehiculos.RowHeadersVisible = false;
 
         dgvVehiculos.SelectionMode =
             DataGridViewSelectionMode.FullRowSelect;
 
         dgvVehiculos.AutoGenerateColumns = false;
-        dgvVehiculos.RowHeadersVisible = false;
 
         dgvVehiculos.AutoSizeColumnsMode =
             DataGridViewAutoSizeColumnsMode.Fill;
+
+        dgvVehiculos.EnableHeadersVisualStyles = false;
+
+        dgvVehiculos.ColumnHeadersHeight = 42;
+
+        dgvVehiculos.ColumnHeadersBorderStyle =
+            DataGridViewHeaderBorderStyle.None;
+
+        dgvVehiculos.ColumnHeadersDefaultCellStyle =
+            new DataGridViewCellStyle
+            {
+                BackColor = ColorPrincipal,
+                ForeColor = Color.White,
+                Font = new Font(
+                    "Segoe UI",
+                    10,
+                    FontStyle.Bold),
+                Alignment =
+                    DataGridViewContentAlignment.MiddleLeft,
+                Padding = new Padding(8, 0, 8, 0)
+            };
+
+        dgvVehiculos.DefaultCellStyle =
+            new DataGridViewCellStyle
+            {
+                BackColor = Color.White,
+                ForeColor =
+                    Color.FromArgb(51, 65, 85),
+                SelectionBackColor =
+                    Color.FromArgb(224, 231, 255),
+                SelectionForeColor = ColorPrincipal,
+                Font = new Font("Segoe UI", 10),
+                Padding = new Padding(8, 0, 8, 0)
+            };
+
+        dgvVehiculos.AlternatingRowsDefaultCellStyle =
+            new DataGridViewCellStyle
+            {
+                BackColor =
+                    Color.FromArgb(248, 250, 252)
+            };
+
+        dgvVehiculos.RowTemplate.Height = 38;
+
+        dgvVehiculos.CellBorderStyle =
+            DataGridViewCellBorderStyle.SingleHorizontal;
+
+        dgvVehiculos.GridColor =
+            Color.FromArgb(226, 232, 240);
 
         AgregarColumna(
             "Placa",
@@ -323,6 +567,8 @@ public partial class Form1 : Form
 
     private void ConectarEventos()
     {
+        Shown += CargarMotorInicialAsync;
+
         btnConectar.Click +=
             ConectarBaseDatosAsync;
 
@@ -338,39 +584,127 @@ public partial class Form1 : Form
         btnEliminar.Click +=
             EliminarVehiculoAsync;
 
-        cboMotor.SelectionChangeCommitted +=
-            CambiarMotor;
+        tabMotores.SelectedIndexChanged +=
+            CambiarMotorAsync;
+
+        tabMotores.DrawItem +=
+            DibujarPestanaMotor;
 
         dgvVehiculos.SelectionChanged +=
             CargarVehiculoSeleccionado;
+    }
+
+    private void DibujarPestanaMotor(
+        object? sender,
+        DrawItemEventArgs e)
+    {
+        Graphics grafico = e.Graphics;
+
+        grafico.SmoothingMode =
+            SmoothingMode.AntiAlias;
+
+        Rectangle area =
+            tabMotores.GetTabRect(e.Index);
+
+        area.Inflate(-4, -3);
+
+        bool seleccionada =
+            e.Index == tabMotores.SelectedIndex;
+
+        Color fondo = seleccionada
+            ? ColorMorado
+            : Color.FromArgb(241, 245, 249);
+
+        Color texto = seleccionada
+            ? Color.White
+            : Color.FromArgb(71, 85, 105);
+
+        using GraphicsPath ruta =
+            CrearRutaRedondeada(area, 10);
+
+        using var brocha =
+            new SolidBrush(fondo);
+
+        grafico.FillPath(brocha, ruta);
+
+        TextRenderer.DrawText(
+            grafico,
+            tabMotores.TabPages[e.Index].Text,
+            tabMotores.Font,
+            area,
+            texto,
+            TextFormatFlags.HorizontalCenter
+            | TextFormatFlags.VerticalCenter
+            | TextFormatFlags.EndEllipsis);
+    }
+
+    private async void CargarMotorInicialAsync(
+        object? sender,
+        EventArgs e)
+    {
+        await ConectarMotorSeleccionadoAsync();
     }
 
     private async void ConectarBaseDatosAsync(
         object? sender,
         EventArgs e)
     {
-        if (cboMotor.SelectedItem
-            is not MotorBaseDatos motor)
+        await ConectarMotorSeleccionadoAsync();
+    }
+
+    private async void CambiarMotorAsync(
+        object? sender,
+        EventArgs e)
+    {
+        repositorioActual = null;
+        vehiculos.Clear();
+
+        LimpiarFormulario();
+
+        MotorBaseDatos? motor =
+            ObtenerMotorSeleccionado();
+
+        lblEstado.Text = motor is null
+            ? "Selecciona una pestaña."
+            : $"Cambiando a "
+              + $"{ObtenerNombreMotor(motor.Value)}...";
+
+        await ConectarMotorSeleccionadoAsync();
+    }
+
+    private async Task ConectarMotorSeleccionadoAsync()
+    {
+        MotorBaseDatos? motorSeleccionado =
+            ObtenerMotorSeleccionado();
+
+        if (motorSeleccionado is null)
         {
             MostrarMensaje(
-                "Selecciona un motor de base de datos.",
+                "Selecciona una pestaña de base de datos.",
                 "Motor no seleccionado",
                 MessageBoxIcon.Information);
 
             return;
         }
 
+        MotorBaseDatos motor =
+            motorSeleccionado.Value;
+
+        string nombreMotor =
+            ObtenerNombreMotor(motor);
+
         try
         {
             EstablecerOperacionEnCurso(
                 true,
-                $"Conectando con {motor}...");
+                $"Conectando con {nombreMotor}...");
 
             IVehiculoRepository repositorio =
                 fabrica.Crear(motor);
 
             bool conexionCorrecta =
-                await repositorio.ProbarConexionAsync();
+                await repositorio
+                    .ProbarConexionAsync();
 
             if (!conexionCorrecta)
             {
@@ -378,7 +712,8 @@ public partial class Form1 : Form
                 vehiculos.Clear();
 
                 MostrarMensaje(
-                    $"No fue posible conectar con {motor}."
+                    $"No fue posible conectar con "
+                    + $"{nombreMotor}."
                     + Environment.NewLine
                     + "Revisa appsettings.local.json, "
                     + "el servidor y la tabla.",
@@ -386,7 +721,7 @@ public partial class Form1 : Form
                     MessageBoxIcon.Error);
 
                 lblEstado.Text =
-                    $"Sin conexión con {motor}.";
+                    $"Sin conexión con {nombreMotor}.";
 
                 return;
             }
@@ -398,7 +733,8 @@ public partial class Form1 : Form
             LimpiarFormulario();
 
             lblEstado.Text =
-                $"Conectado correctamente con {motor}.";
+                $"Conectado correctamente con "
+                + $"{nombreMotor}.";
         }
         catch (Exception ex)
         {
@@ -413,17 +749,27 @@ public partial class Form1 : Form
         }
     }
 
-    private void CambiarMotor(
-        object? sender,
-        EventArgs e)
+    private MotorBaseDatos? ObtenerMotorSeleccionado()
     {
-        repositorioActual = null;
-        vehiculos.Clear();
+        if (tabMotores.SelectedTab?.Tag
+            is MotorBaseDatos motor)
+        {
+            return motor;
+        }
 
-        LimpiarFormulario();
+        return null;
+    }
 
-        lblEstado.Text =
-            "Motor cambiado. Presiona Conectar y cargar.";
+    private static string ObtenerNombreMotor(
+        MotorBaseDatos motor)
+    {
+        return motor switch
+        {
+            MotorBaseDatos.MySql => "MySQL",
+            MotorBaseDatos.SqlServer => "SQL Server",
+            MotorBaseDatos.Oracle => "Oracle",
+            _ => motor.ToString()
+        };
     }
 
     private void NuevoVehiculo(
@@ -559,7 +905,8 @@ public partial class Form1 : Form
             LimpiarFormulario();
 
             lblEstado.Text =
-                $"Vehículo {datosActualizados.Placa} modificado.";
+                $"Vehículo "
+                + $"{datosActualizados.Placa} modificado.";
         }
         catch (Exception ex)
         {
@@ -639,7 +986,8 @@ public partial class Form1 : Form
         }
 
         IReadOnlyList<Vehiculo> resultados =
-            await repositorioActual.ObtenerTodosAsync();
+            await repositorioActual
+                .ObtenerTodosAsync();
 
         vehiculos.Clear();
 
@@ -664,7 +1012,8 @@ public partial class Form1 : Form
             Modelo = txtModelo.Text.Trim(),
 
             Anio =
-                decimal.ToInt32(nudAnio.Value),
+                decimal.ToInt32(
+                    nudAnio.Value),
 
             Color = txtColor.Text.Trim()
         };
@@ -699,8 +1048,8 @@ public partial class Form1 : Form
         }
 
         MostrarMensaje(
-            "Selecciona un motor y presiona "
-            + "Conectar y cargar.",
+            "Selecciona una pestaña de base de datos "
+            + "y espera que termine la conexión.",
             "Base de datos no conectada",
             MessageBoxIcon.Information);
 
@@ -755,9 +1104,15 @@ public partial class Form1 : Form
 
         dgvVehiculos.ClearSelection();
 
+        MotorBaseDatos? motor =
+            ObtenerMotorSeleccionado();
+
         lblEstado.Text =
             repositorioActual is null
-                ? "Selecciona un motor y conecta la base."
+                ? motor is null
+                    ? "Selecciona una pestaña."
+                    : $"Preparando "
+                      + $"{ObtenerNombreMotor(motor.Value)}."
                 : "Completa los datos del vehículo.";
 
         ActualizarEstadoBotones();
@@ -788,9 +1143,11 @@ public partial class Form1 : Form
         bool seleccionado =
             vehiculoSeleccionado is not null;
 
-        cboMotor.Enabled = !operacionEnCurso;
+        tabMotores.Enabled = !operacionEnCurso;
         btnConectar.Enabled = !operacionEnCurso;
-        btnNuevo.Enabled = !operacionEnCurso;
+
+        btnNuevo.Enabled =
+            !operacionEnCurso && conectado;
 
         btnGuardar.Enabled =
             !operacionEnCurso && conectado;
@@ -829,11 +1186,36 @@ public partial class Form1 : Form
             icono);
     }
 
+    private static Panel CrearTarjeta(
+        Color color,
+        int radio,
+        Padding relleno)
+    {
+        var panel = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = color,
+            Padding = relleno,
+            Margin = new Padding(0, 0, 0, 10)
+        };
+
+        AplicarBordesRedondeados(
+            panel,
+            radio);
+
+        return panel;
+    }
+
     private static void ConfigurarCampo(
         TextBox campo)
     {
         campo.Dock = DockStyle.Fill;
-        campo.Margin = new Padding(5);
+        campo.Margin = new Padding(7);
+        campo.Font = new Font("Segoe UI", 10);
+        campo.BackColor =
+            Color.FromArgb(248, 250, 252);
+        campo.BorderStyle =
+            BorderStyle.FixedSingle;
     }
 
     private static void AgregarCampo(
@@ -847,7 +1229,14 @@ public partial class Form1 : Form
         {
             Text = etiqueta,
             Dock = DockStyle.Fill,
-            TextAlign = ContentAlignment.MiddleLeft
+            TextAlign =
+                ContentAlignment.MiddleLeft,
+            Font = new Font(
+                "Segoe UI",
+                10,
+                FontStyle.Bold),
+            ForeColor =
+                Color.FromArgb(51, 65, 85)
         };
 
         panel.Controls.Add(
@@ -870,16 +1259,169 @@ public partial class Form1 : Form
         {
             Text = texto,
             Width = ancho,
-            Height = 38,
+            Height = 42,
+            AutoSize = false,
             BackColor = color,
             ForeColor = Color.White,
             FlatStyle = FlatStyle.Flat,
             Cursor = Cursors.Hand,
-            Margin = new Padding(0, 0, 10, 0)
+            Font = new Font(
+                "Segoe UI",
+                10,
+                FontStyle.Bold),
+            TextAlign =
+                ContentAlignment.MiddleCenter,
+            Margin = new Padding(5),
+            Padding = new Padding(0),
+            UseVisualStyleBackColor = false
         };
 
         boton.FlatAppearance.BorderSize = 0;
 
+        boton.FlatAppearance.MouseDownBackColor =
+            OscurecerColor(color, 0.75);
+
+        boton.MouseEnter += (_, _) =>
+        {
+            if (boton.Enabled)
+            {
+                boton.BackColor =
+                    OscurecerColor(
+                        color,
+                        0.88);
+            }
+        };
+
+        boton.MouseLeave += (_, _) =>
+        {
+            boton.BackColor = color;
+        };
+
+        AplicarBordesRedondeados(
+            boton,
+            12);
+
         return boton;
+    }
+
+    private static Color OscurecerColor(
+        Color color,
+        double factor)
+    {
+        return Color.FromArgb(
+            color.A,
+            Math.Clamp(
+                (int)(color.R * factor),
+                0,
+                255),
+            Math.Clamp(
+                (int)(color.G * factor),
+                0,
+                255),
+            Math.Clamp(
+                (int)(color.B * factor),
+                0,
+                255));
+    }
+
+    private static void AplicarBordesRedondeados(
+        Control control,
+        int radio)
+    {
+        control.Resize += (_, _) =>
+            ActualizarRegionRedondeada(
+                control,
+                radio);
+
+        ActualizarRegionRedondeada(
+            control,
+            radio);
+    }
+
+    private static void ActualizarRegionRedondeada(
+        Control control,
+        int radio)
+    {
+        if (control.Width <= 1
+            || control.Height <= 1)
+        {
+            return;
+        }
+
+        var area = new Rectangle(
+            0,
+            0,
+            control.Width,
+            control.Height);
+
+        using GraphicsPath ruta =
+            CrearRutaRedondeada(
+                area,
+                radio);
+
+        Region? regionAnterior =
+            control.Region;
+
+        control.Region =
+            new Region(ruta);
+
+        regionAnterior?.Dispose();
+    }
+
+    private static GraphicsPath CrearRutaRedondeada(
+        Rectangle area,
+        int radio)
+    {
+        var ruta = new GraphicsPath();
+
+        int diametro = Math.Min(
+            radio * 2,
+            Math.Min(
+                area.Width,
+                area.Height));
+
+        if (diametro <= 1)
+        {
+            ruta.AddRectangle(area);
+            return ruta;
+        }
+
+        var arco = new Rectangle(
+            area.X,
+            area.Y,
+            diametro,
+            diametro);
+
+        ruta.AddArc(
+            arco,
+            180,
+            90);
+
+        arco.X =
+            area.Right - diametro;
+
+        ruta.AddArc(
+            arco,
+            270,
+            90);
+
+        arco.Y =
+            area.Bottom - diametro;
+
+        ruta.AddArc(
+            arco,
+            0,
+            90);
+
+        arco.X = area.Left;
+
+        ruta.AddArc(
+            arco,
+            90,
+            90);
+
+        ruta.CloseFigure();
+
+        return ruta;
     }
 }
