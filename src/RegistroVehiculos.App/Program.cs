@@ -1,16 +1,35 @@
+using RegistroVehiculos.Infrastructure.Configuration;
+using RegistroVehiculos.Infrastructure.Factories;
+
 namespace RegistroVehiculos.App;
 
-static class Program
+internal static class Program
 {
-    /// <summary>
-    ///  The main entry point for the application.
-    /// </summary>
     [STAThread]
-    static void Main()
+    private static void Main()
     {
-        // To customize application configuration such as set high DPI settings or default font,
-        // see https://aka.ms/applicationconfiguration.
         ApplicationConfiguration.Initialize();
-        Application.Run(new Form1());
-    }    
+
+        try
+        {
+            ConfiguracionAplicacion configuracion =
+                CargadorConfiguracion.Cargar();
+
+            var fabrica =
+                new VehiculoRepositoryFactory(configuracion);
+
+            Application.Run(new Form1(fabrica));
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(
+                $"No fue posible iniciar la aplicación."
+                + Environment.NewLine
+                + Environment.NewLine
+                + ex.Message,
+                "Error de configuración",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+    }
 }

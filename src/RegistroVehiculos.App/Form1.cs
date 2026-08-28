@@ -1,15 +1,25 @@
 using System.ComponentModel;
 using System.Drawing;
-using System.Linq;
 using System.Windows.Forms;
 using RegistroVehiculos.Core.Enums;
+using RegistroVehiculos.Core.Interfaces;
 using RegistroVehiculos.Core.Models;
 using RegistroVehiculos.Core.Validation;
+using RegistroVehiculos.Infrastructure.Factories;
 
 namespace RegistroVehiculos.App;
 
 public partial class Form1 : Form
 {
+    private readonly VehiculoRepositoryFactory fabrica;
+
+    private IVehiculoRepository? repositorioActual;
+    private Vehiculo? vehiculoSeleccionado;
+    private string? placaOriginal;
+    private bool operacionEnCurso;
+
+    private readonly BindingList<Vehiculo> vehiculos = new();
+
     private readonly ComboBox cboMotor = new();
 
     private readonly TextBox txtPlaca = new();
@@ -18,6 +28,7 @@ public partial class Form1 : Form
     private readonly NumericUpDown nudAnio = new();
     private readonly TextBox txtColor = new();
 
+    private readonly Button btnConectar;
     private readonly Button btnNuevo;
     private readonly Button btnGuardar;
     private readonly Button btnModificar;
@@ -26,13 +37,19 @@ public partial class Form1 : Form
     private readonly DataGridView dgvVehiculos = new();
     private readonly Label lblEstado = new();
 
-    private readonly BindingList<Vehiculo> vehiculos = new();
-
-    private Vehiculo? vehiculoSeleccionado;
-
-    public Form1()
+    public Form1(
+        VehiculoRepositoryFactory fabrica)
     {
         InitializeComponent();
+
+        this.fabrica = fabrica
+            ?? throw new ArgumentNullException(
+                nameof(fabrica));
+
+        btnConectar = CrearBoton(
+            "Conectar y cargar",
+            Color.FromArgb(111, 66, 193),
+            160);
 
         btnNuevo = CrearBoton(
             "Nuevo",
@@ -131,13 +148,14 @@ public partial class Form1 : Form
         cboMotor.DropDownStyle =
             ComboBoxStyle.DropDownList;
 
-        cboMotor.Width = 220;
+        cboMotor.Width = 190;
 
         cboMotor.DataSource =
             Enum.GetValues<MotorBaseDatos>();
 
         panelMotor.Controls.Add(etiquetaMotor);
         panelMotor.Controls.Add(cboMotor);
+        panelMotor.Controls.Add(btnConectar);
 
         contenedor.Controls.Add(panelMotor, 0, 1);
 
@@ -305,13 +323,107 @@ public partial class Form1 : Form
 
     private void ConectarEventos()
     {
-        btnNuevo.Click += NuevoVehiculo;
-        btnGuardar.Click += GuardarVehiculo;
-        btnModificar.Click += ModificarVehiculo;
-        btnEliminar.Click += EliminarVehiculo;
+        btnConectar.Click +=
+            ConectarBaseDatosAsync;
+
+        btnNuevo.Click +=
+            NuevoVehiculo;
+
+        btnGuardar.Click +=
+            GuardarVehiculoAsync;
+
+        btnModificar.Click +=
+            ModificarVehiculoAsync;
+
+        btnEliminar.Click +=
+            EliminarVehiculoAsync;
+
+        cboMotor.SelectionChangeCommitted +=
+            CambiarMotor;
 
         dgvVehiculos.SelectionChanged +=
             CargarVehiculoSeleccionado;
+    }
+
+    private async void ConectarBaseDatosAsync(
+        object? sender,
+        EventArgs e)
+    {
+        if (cboMotor.SelectedItem
+            is not MotorBaseDatos motor)
+        {
+            MostrarMensaje(
+                "Selecciona un motor de base de datos.",
+                "Motor no seleccionado",
+                MessageBoxIcon.Information);
+
+            return;
+        }
+
+        try
+        {
+            EstablecerOperacionEnCurso(
+                true,
+                $"Conectando con {motor}...");
+
+            IVehiculoRepository repositorio =
+                fabrica.Crear(motor);
+
+            bool conexionCorrecta =
+                await repositorio.ProbarConexionAsync();
+
+            if (!conexionCorrecta)
+            {
+                repositorioActual = null;
+                vehiculos.Clear();
+
+                MostrarMensaje(
+                    $"No fue posible conectar con {motor}."
+                    + Environment.NewLine
+                    + "Revisa appsettings.local.json, "
+                    + "el servidor y la tabla.",
+                    "Error de conexión",
+                    MessageBoxIcon.Error);
+
+                lblEstado.Text =
+                    $"Sin conexión con {motor}.";
+
+                return;
+            }
+
+            repositorioActual = repositorio;
+
+            await CargarVehiculosAsync();
+
+            LimpiarFormulario();
+
+            lblEstado.Text =
+                $"Conectado correctamente con {motor}.";
+        }
+        catch (Exception ex)
+        {
+            repositorioActual = null;
+            vehiculos.Clear();
+
+            MostrarError(ex);
+        }
+        finally
+        {
+            EstablecerOperacionEnCurso(false);
+        }
+    }
+
+    private void CambiarMotor(
+        object? sender,
+        EventArgs e)
+    {
+        repositorioActual = null;
+        vehiculos.Clear();
+
+        LimpiarFormulario();
+
+        lblEstado.Text =
+            "Motor cambiado. Presiona Conectar y cargar.";
     }
 
     private void NuevoVehiculo(
@@ -319,6 +431,224 @@ public partial class Form1 : Form
         EventArgs e)
     {
         LimpiarFormulario();
+    }
+
+    private async void GuardarVehiculoAsync(
+        object? sender,
+        EventArgs e)
+    {
+        if (!ComprobarConexion())
+        {
+            return;
+        }
+
+        Vehiculo nuevoVehiculo =
+            ObtenerVehiculoFormulario();
+
+        if (!ValidarVehiculo(nuevoVehiculo))
+        {
+            return;
+        }
+
+        try
+        {
+            EstablecerOperacionEnCurso(
+                true,
+                "Guardando vehículo...");
+
+            bool placaDuplicada =
+                await repositorioActual!
+                    .ExistePlacaAsync(
+                        nuevoVehiculo.Placa);
+
+            if (placaDuplicada)
+            {
+                MostrarMensaje(
+                    "Ya existe un vehículo con esa placa.",
+                    "Placa duplicada",
+                    MessageBoxIcon.Warning);
+
+                return;
+            }
+
+            await repositorioActual!
+                .AgregarAsync(nuevoVehiculo);
+
+            await CargarVehiculosAsync();
+
+            LimpiarFormulario();
+
+            lblEstado.Text =
+                $"Vehículo {nuevoVehiculo.Placa} guardado.";
+        }
+        catch (Exception ex)
+        {
+            MostrarError(ex);
+        }
+        finally
+        {
+            EstablecerOperacionEnCurso(false);
+        }
+    }
+
+    private async void ModificarVehiculoAsync(
+        object? sender,
+        EventArgs e)
+    {
+        if (!ComprobarConexion())
+        {
+            return;
+        }
+
+        if (vehiculoSeleccionado is null
+            || string.IsNullOrWhiteSpace(placaOriginal))
+        {
+            MostrarMensaje(
+                "Selecciona un vehículo de la tabla.",
+                "Vehículo no seleccionado",
+                MessageBoxIcon.Information);
+
+            return;
+        }
+
+        Vehiculo datosActualizados =
+            ObtenerVehiculoFormulario();
+
+        if (!ValidarVehiculo(datosActualizados))
+        {
+            return;
+        }
+
+        try
+        {
+            EstablecerOperacionEnCurso(
+                true,
+                "Modificando vehículo...");
+
+            bool placaCambio =
+                !string.Equals(
+                    placaOriginal,
+                    datosActualizados.Placa,
+                    StringComparison.OrdinalIgnoreCase);
+
+            if (placaCambio)
+            {
+                bool placaDuplicada =
+                    await repositorioActual!
+                        .ExistePlacaAsync(
+                            datosActualizados.Placa);
+
+                if (placaDuplicada)
+                {
+                    MostrarMensaje(
+                        "Ya existe otro vehículo con esa placa.",
+                        "Placa duplicada",
+                        MessageBoxIcon.Warning);
+
+                    return;
+                }
+            }
+
+            await repositorioActual!
+                .ActualizarAsync(
+                    placaOriginal,
+                    datosActualizados);
+
+            await CargarVehiculosAsync();
+
+            LimpiarFormulario();
+
+            lblEstado.Text =
+                $"Vehículo {datosActualizados.Placa} modificado.";
+        }
+        catch (Exception ex)
+        {
+            MostrarError(ex);
+        }
+        finally
+        {
+            EstablecerOperacionEnCurso(false);
+        }
+    }
+
+    private async void EliminarVehiculoAsync(
+        object? sender,
+        EventArgs e)
+    {
+        if (!ComprobarConexion())
+        {
+            return;
+        }
+
+        if (vehiculoSeleccionado is null)
+        {
+            MostrarMensaje(
+                "Selecciona un vehículo de la tabla.",
+                "Vehículo no seleccionado",
+                MessageBoxIcon.Information);
+
+            return;
+        }
+
+        string placa =
+            vehiculoSeleccionado.Placa;
+
+        DialogResult respuesta =
+            MessageBox.Show(
+                $"¿Deseas eliminar el vehículo {placa}?",
+                "Confirmar eliminación",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question);
+
+        if (respuesta != DialogResult.Yes)
+        {
+            return;
+        }
+
+        try
+        {
+            EstablecerOperacionEnCurso(
+                true,
+                "Eliminando vehículo...");
+
+            await repositorioActual!
+                .EliminarAsync(placa);
+
+            await CargarVehiculosAsync();
+
+            LimpiarFormulario();
+
+            lblEstado.Text =
+                $"Vehículo {placa} eliminado.";
+        }
+        catch (Exception ex)
+        {
+            MostrarError(ex);
+        }
+        finally
+        {
+            EstablecerOperacionEnCurso(false);
+        }
+    }
+
+    private async Task CargarVehiculosAsync()
+    {
+        if (repositorioActual is null)
+        {
+            return;
+        }
+
+        IReadOnlyList<Vehiculo> resultados =
+            await repositorioActual.ObtenerTodosAsync();
+
+        vehiculos.Clear();
+
+        foreach (Vehiculo vehiculo in resultados)
+        {
+            vehiculos.Add(vehiculo);
+        }
+
+        dgvVehiculos.ClearSelection();
     }
 
     private Vehiculo ObtenerVehiculoFormulario()
@@ -351,163 +681,30 @@ public partial class Form1 : Form
             return true;
         }
 
-        MessageBox.Show(
+        MostrarMensaje(
             string.Join(
                 Environment.NewLine,
                 errores),
             "Información incorrecta",
-            MessageBoxButtons.OK,
             MessageBoxIcon.Warning);
 
         return false;
     }
 
-    private void GuardarVehiculo(
-        object? sender,
-        EventArgs e)
+    private bool ComprobarConexion()
     {
-        Vehiculo nuevoVehiculo =
-            ObtenerVehiculoFormulario();
-
-        if (!ValidarVehiculo(nuevoVehiculo))
+        if (repositorioActual is not null)
         {
-            return;
+            return true;
         }
 
-        bool placaDuplicada =
-            vehiculos.Any(vehiculo =>
-                string.Equals(
-                    vehiculo.Placa,
-                    nuevoVehiculo.Placa,
-                    StringComparison.OrdinalIgnoreCase));
+        MostrarMensaje(
+            "Selecciona un motor y presiona "
+            + "Conectar y cargar.",
+            "Base de datos no conectada",
+            MessageBoxIcon.Information);
 
-        if (placaDuplicada)
-        {
-            MessageBox.Show(
-                "Ya existe un vehículo con esa placa.",
-                "Placa duplicada",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Warning);
-
-            return;
-        }
-
-        vehiculos.Add(nuevoVehiculo);
-
-        LimpiarFormulario();
-
-        lblEstado.Text =
-            $"Vehículo con placa " +
-            $"{nuevoVehiculo.Placa} guardado.";
-    }
-
-    private void ModificarVehiculo(
-        object? sender,
-        EventArgs e)
-    {
-        if (vehiculoSeleccionado is null)
-        {
-            MessageBox.Show(
-                "Selecciona un vehículo de la tabla.",
-                "Vehículo no seleccionado",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
-
-            return;
-        }
-
-        Vehiculo datosActualizados =
-            ObtenerVehiculoFormulario();
-
-        if (!ValidarVehiculo(datosActualizados))
-        {
-            return;
-        }
-
-        bool placaDuplicada =
-            vehiculos.Any(vehiculo =>
-                !ReferenceEquals(
-                    vehiculo,
-                    vehiculoSeleccionado)
-                &&
-                string.Equals(
-                    vehiculo.Placa,
-                    datosActualizados.Placa,
-                    StringComparison.OrdinalIgnoreCase));
-
-        if (placaDuplicada)
-        {
-            MessageBox.Show(
-                "Ya existe otro vehículo con esa placa.",
-                "Placa duplicada",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Warning);
-
-            return;
-        }
-
-        vehiculoSeleccionado.Placa =
-            datosActualizados.Placa;
-
-        vehiculoSeleccionado.Marca =
-            datosActualizados.Marca;
-
-        vehiculoSeleccionado.Modelo =
-            datosActualizados.Modelo;
-
-        vehiculoSeleccionado.Anio =
-            datosActualizados.Anio;
-
-        vehiculoSeleccionado.Color =
-            datosActualizados.Color;
-
-        vehiculos.ResetBindings();
-
-        LimpiarFormulario();
-
-        lblEstado.Text =
-            $"Vehículo con placa " +
-            $"{datosActualizados.Placa} modificado.";
-    }
-
-    private void EliminarVehiculo(
-        object? sender,
-        EventArgs e)
-    {
-        if (vehiculoSeleccionado is null)
-        {
-            MessageBox.Show(
-                "Selecciona un vehículo de la tabla.",
-                "Vehículo no seleccionado",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
-
-            return;
-        }
-
-        DialogResult respuesta =
-            MessageBox.Show(
-                $"¿Deseas eliminar el vehículo " +
-                $"{vehiculoSeleccionado.Placa}?",
-                "Confirmar eliminación",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Question);
-
-        if (respuesta != DialogResult.Yes)
-        {
-            return;
-        }
-
-        string placaEliminada =
-            vehiculoSeleccionado.Placa;
-
-        vehiculos.Remove(vehiculoSeleccionado);
-
-        LimpiarFormulario();
-
-        lblEstado.Text =
-            $"Vehículo con placa " +
-            $"{placaEliminada} eliminado.";
+        return false;
     }
 
     private void CargarVehiculoSeleccionado(
@@ -530,6 +727,7 @@ public partial class Form1 : Form
         }
 
         vehiculoSeleccionado = seleccionado;
+        placaOriginal = seleccionado.Placa;
 
         txtPlaca.Text = seleccionado.Placa;
         txtMarca.Text = seleccionado.Marca;
@@ -537,11 +735,10 @@ public partial class Form1 : Form
         nudAnio.Value = seleccionado.Anio;
         txtColor.Text = seleccionado.Color;
 
-        btnModificar.Enabled = true;
-        btnEliminar.Enabled = true;
-
         lblEstado.Text =
             $"Vehículo {seleccionado.Placa} seleccionado.";
+
+        ActualizarEstadoBotones();
     }
 
     private void LimpiarFormulario()
@@ -554,16 +751,82 @@ public partial class Form1 : Form
         nudAnio.Value = DateTime.Now.Year;
 
         vehiculoSeleccionado = null;
+        placaOriginal = null;
 
         dgvVehiculos.ClearSelection();
 
-        btnModificar.Enabled = false;
-        btnEliminar.Enabled = false;
-
         lblEstado.Text =
-            "Completa los datos del vehículo.";
+            repositorioActual is null
+                ? "Selecciona un motor y conecta la base."
+                : "Completa los datos del vehículo.";
+
+        ActualizarEstadoBotones();
 
         txtPlaca.Focus();
+    }
+
+    private void EstablecerOperacionEnCurso(
+        bool enCurso,
+        string? mensaje = null)
+    {
+        operacionEnCurso = enCurso;
+        UseWaitCursor = enCurso;
+
+        if (!string.IsNullOrWhiteSpace(mensaje))
+        {
+            lblEstado.Text = mensaje;
+        }
+
+        ActualizarEstadoBotones();
+    }
+
+    private void ActualizarEstadoBotones()
+    {
+        bool conectado =
+            repositorioActual is not null;
+
+        bool seleccionado =
+            vehiculoSeleccionado is not null;
+
+        cboMotor.Enabled = !operacionEnCurso;
+        btnConectar.Enabled = !operacionEnCurso;
+        btnNuevo.Enabled = !operacionEnCurso;
+
+        btnGuardar.Enabled =
+            !operacionEnCurso && conectado;
+
+        btnModificar.Enabled =
+            !operacionEnCurso
+            && conectado
+            && seleccionado;
+
+        btnEliminar.Enabled =
+            !operacionEnCurso
+            && conectado
+            && seleccionado;
+    }
+
+    private void MostrarError(Exception ex)
+    {
+        lblEstado.Text =
+            "Ocurrió un error durante la operación.";
+
+        MostrarMensaje(
+            ex.Message,
+            "Error",
+            MessageBoxIcon.Error);
+    }
+
+    private static void MostrarMensaje(
+        string mensaje,
+        string titulo,
+        MessageBoxIcon icono)
+    {
+        MessageBox.Show(
+            mensaje,
+            titulo,
+            MessageBoxButtons.OK,
+            icono);
     }
 
     private static void ConfigurarCampo(
@@ -600,12 +863,13 @@ public partial class Form1 : Form
 
     private static Button CrearBoton(
         string texto,
-        Color color)
+        Color color,
+        int ancho = 125)
     {
         var boton = new Button
         {
             Text = texto,
-            Width = 125,
+            Width = ancho,
             Height = 38,
             BackColor = color,
             ForeColor = Color.White,
